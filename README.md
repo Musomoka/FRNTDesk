@@ -12,6 +12,7 @@ Host and attend paid, live classroom-style video tutorials. Zambian mobile money
 | Data | PostgreSQL 18 + Prisma 7.10.0 |
 | Queue | BullMQ 6 on Redis 7 |
 | Media | LiveKit Cloud (SFU) — `livekit-client` 2.22 |
+| Auth | Auth0 Universal Login — `@auth0/auth0-angular` 2.12, `express-oauth2-jwt-bearer` 1.10 |
 | Shared | `@frntdesk/shared` — zod schemas + pure domain logic used by both apps |
 
 ## Pinned versions — do not let these drift
@@ -32,8 +33,7 @@ resolver crashes outright.
 
 ```bash
 cp .env.example .env
-# Generate the two JWT secrets:
-#   openssl rand -base64 48
+# Fill in AUTH0_DOMAIN / AUTH0_CLIENT_ID / AUTH0_AUDIENCE — see "Auth0 setup" below.
 npm install
 npm run infra:up            # postgres:5433, redis:6380, mailpit:8025
 npm run db:migrate --workspace @frntdesk/api
@@ -41,12 +41,71 @@ npm run db:seed
 npm run dev                 # API on :3000, web on :4200
 ```
 
-Seeded accounts (development only), both with password `frntdesk-dev-password`:
+`npm run dev` (and `build`/`test`) regenerates `apps/web/src/environment.ts`
+from `.env` automatically via an npm `pre*` hook — see `apps/web/scripts/generate-environment.cjs`.
+It's gitignored like `.env` itself; run `npm run generate-environment --workspace @frntdesk/web`
+directly if you ever need it without running one of those.
 
-- `host@frntdesk.local` — owns two published classrooms
-- `student@frntdesk.local`
+Seeded users (`host@frntdesk.local`, `student@frntdesk.local`) have **no
+password** — identity is entirely Auth0's job. Sign up in Universal Login with
+one of those emails and the seeded row (with its demo classrooms) is claimed
+automatically; see "How login actually works" below.
 
 Check the API is up: `curl localhost:3000/api/health/ready`
+
+## Auth0 setup
+
+Identity is fully delegated to Auth0 — there is no local login/password/
+refresh-token system. You need a tenant and two things registered in it
+(five minutes, one time):
+
+1. **Applications → Create Application → Single Page Application.** This is a
+   *public* client (Authorization Code + PKCE, no client secret) — that's
+   what makes its Domain/Client ID safe to bake into the frontend build.
+   - Under its **Settings**, set:
+     - **Allowed Callback URLs**: `http://localhost:4200`
+     - **Allowed Logout URLs**: `http://localhost:4200`
+     - **Allowed Web Origins**: `http://localhost:4200`
+   - Copy the **Domain** and **Client ID** from this page.
+2. **Applications → APIs → Create API.** This represents the NestJS backend.
+   - **Identifier**: any unique URI-shaped string, e.g. `https://api.frntdesk.zm`
+     (it doesn't need to resolve to anything real — it's just an audience tag).
+   - Signing Algorithm: RS256 (the default).
+   - Copy the **Identifier** — that's your `AUTH0_AUDIENCE`.
+3. Paste the three values into `.env`:
+   ```
+   AUTH0_DOMAIN=your-tenant.us.auth0.com
+   AUTH0_CLIENT_ID=<Client ID from step 1>
+   AUTH0_AUDIENCE=<API Identifier from step 2>
+   ```
+4. *(Optional, any time later)* **Authentication → Social** to enable Google
+   and/or Facebook connections. This needs zero code changes on our side —
+   Universal Login shows whatever connections are enabled on the tenant.
+   Auth0's shared "dev keys" work for local testing without your own
+   Google/Facebook OAuth app, with rate limits fine for development.
+
+### How login actually works
+
+There's no login form in this app — tapping "Log in" redirects to Auth0's own
+hosted Universal Login page, then back. Nothing here ever sees a password.
+
+- **Frontend** (`apps/web/src/app/core/auth/`): `AuthStore` wraps Auth0's own
+  `AuthService`, exposing the same signal surface (`isAuthenticated`,
+  `currentUser`) the rest of the app already used with the old system, so
+  guards and the shell didn't need to change. `authGuard`/
+  `redirectIfAuthenticatedGuard` wait for Auth0's one-time startup check
+  (`ready()`) before deciding — deciding synchronously would bounce a
+  genuinely logged-in user to `/login` on every hard refresh.
+- **Backend** (`apps/api/src/auth/`): `Auth0Guard` validates the incoming
+  access token's signature via Auth0's JWKS (using their own
+  `express-oauth2-jwt-bearer` middleware, not a hand-rolled verifier). The
+  token only proves `sub` (the Auth0 user id) — profile fields (email, name)
+  are trusted from the authenticated request body instead, which is why
+  `POST /api/auth/sync` exists: called once after every login, it
+  just-in-time-provisions a local `User` row (or links an existing one by
+  email, e.g. a seeded demo row — see `AuthService.syncUser`) so the rest of
+  the schema still has an internal UUID to hang foreign keys off, since
+  Auth0's own user id (`auth0|...`, `google-oauth2|...`) is never used as one.
 
 ## Verification
 
@@ -79,6 +138,21 @@ status endpoint. See `apps/api/src/payments/`.
 **Postgres 18 changed its Docker volume layout.** The mount belongs at
 `/var/lib/postgresql`, not `/var/lib/postgresql/data`; the old path makes the
 container refuse to start.
+
+**No cookies, no server-issued JWTs.** Auth0's SDK holds its own session
+client-side (refresh tokens, `useRefreshTokens: true` + `cacheLocation:
+'localstorage'`) and attaches access tokens via an `Authorization` header
+through its own HTTP interceptor. The API's CORS config no longer needs
+`credentials: true`, and there's nothing for `cookie-parser` to read anymore
+— both were removed rather than left as dead configuration.
+
+**`syncUser`'s account-linking only ever attaches an identity to a row whose
+`auth0Sub` is still null.** A row that's already linked to a different Auth0
+identity throws a `ConflictException` instead of silently being reassigned —
+this is the one piece of the Auth0 integration with real security weight
+(getting it backwards would be an account-takeover bug), and it has direct
+unit test coverage (`apps/api/src/auth/auth.service.test.ts`) rather than
+resting on code review alone.
 
 **`npm audit` reports 4 high findings.** All are in the Prisma **CLI's**
 transitive tree (`mysql2`, `deepmerge-ts`) — a devDependency that is never

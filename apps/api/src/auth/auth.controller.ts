@@ -1,79 +1,26 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
-import { ConfigService } from '@nestjs/config';
-import type { Request, Response } from 'express';
-import { loginRequestSchema, type AuthSession, type UserProfile } from '@frntdesk/shared';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { syncUserRequestSchema, type UserProfile } from '@frntdesk/shared';
 import { zodBody } from '../common/pipes/zod-validation.pipe.js';
-import type { Env } from '../config/env.schema.js';
-import { AuthService, type AccessTokenPayload, type IssuedSession } from './auth.service.js';
-import { CurrentUser } from './current-user.decorator.js';
-import { JwtAuthGuard } from './jwt-auth.guard.js';
-
-/** httpOnly refresh cookie, scoped to auth endpoints only — never sent elsewhere. */
-const REFRESH_COOKIE_NAME = 'frnt_rt';
-const REFRESH_COOKIE_PATH = '/api/auth';
+import { Auth0Guard } from './auth0.guard.js';
+import { AuthService } from './auth.service.js';
+import { CurrentAuth0Sub } from './current-user.decorator.js';
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly auth: AuthService,
-    private readonly config: ConfigService<Env, true>,
-  ) {}
+  constructor(private readonly auth: AuthService) {}
 
-  // Tighter than the app-wide default — this is the endpoint credential
-  // stuffing / brute force actually targets.
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  @Post('login')
-  @HttpCode(HttpStatus.OK)
-  async login(
-    @Body(zodBody(loginRequestSchema)) body: { email: string; password: string },
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<AuthSession> {
-    const session = await this.auth.login(body.email, body.password);
-    this.setRefreshCookie(res, session);
-    return this.toAuthSession(session);
-  }
-
-  @Post('refresh')
-  @HttpCode(HttpStatus.OK)
-  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<AuthSession> {
-    const rawToken = req.cookies?.[REFRESH_COOKIE_NAME] as string | undefined;
-    if (!rawToken) throw new UnauthorizedException('No session to refresh.');
-
-    const session = await this.auth.refresh(rawToken);
-    this.setRefreshCookie(res, session);
-    return this.toAuthSession(session);
-  }
-
-  @Post('logout')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
-    const rawToken = req.cookies?.[REFRESH_COOKIE_NAME] as string | undefined;
-    if (rawToken) await this.auth.logout(rawToken);
-    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
-  }
-
-  @Get('me')
-  @UseGuards(JwtAuthGuard)
-  async me(@CurrentUser() user: AccessTokenPayload): Promise<UserProfile> {
-    return this.auth.getProfile(user.sub);
-  }
-
-  private setRefreshCookie(res: Response, session: IssuedSession): void {
-    res.cookie(REFRESH_COOKIE_NAME, session.refreshToken, {
-      httpOnly: true,
-      // Plain HTTP in local dev; real TLS in every deployed environment.
-      secure: this.config.get('NODE_ENV', { infer: true }) === 'production',
-      // 'lax' covers same-site dev (via the Angular proxy) and a same-
-      // registrable-domain production split (api.frntdesk.zm + app.frntdesk.zm).
-      // A genuinely cross-domain deployment would need 'none' + secure instead.
-      sameSite: 'lax',
-      path: REFRESH_COOKIE_PATH,
-      expires: session.refreshTokenExpiresAt,
-    });
-  }
-
-  private toAuthSession(session: IssuedSession): AuthSession {
-    return { accessToken: session.accessToken, expiresIn: session.expiresIn, user: session.user };
+  /**
+   * Called once by the frontend right after Auth0 reports a successful
+   * login (see apps/web/src/app/core/auth/auth-store.ts). Doubles as "get my
+   * profile": idempotent, always returns the current row either way, so
+   * there's no separate GET endpoint to keep in sync with this one.
+   */
+  @Post('sync')
+  @UseGuards(Auth0Guard)
+  async sync(
+    @CurrentAuth0Sub() auth0Sub: string,
+    @Body(zodBody(syncUserRequestSchema)) body: { email: string; displayName: string; emailVerified: boolean },
+  ): Promise<UserProfile> {
+    return this.auth.syncUser(auth0Sub, body);
   }
 }

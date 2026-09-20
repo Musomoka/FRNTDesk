@@ -1,145 +1,43 @@
-import { Component, inject, signal } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import type { HttpErrorResponse } from '@angular/common/http';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { AuthService } from '../../core/auth/auth.service';
+import { Component, inject } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { AuthService as Auth0Service } from '@auth0/auth0-angular';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
+/**
+ * Not a form — Universal Login means Auth0's own hosted page collects
+ * credentials, never this app. This route exists as a stable, deep-linkable
+ * `/login` for `authGuard` to bounce anonymous users to; on arrival it
+ * immediately redirects to Auth0, carrying `returnUrl` through as `appState`
+ * so Auth0's SDK lands the user back where they were headed once done (its
+ * own default redirect-callback behavior — see AppState.target).
+ */
 @Component({
   selector: 'app-login-page',
-  imports: [
-    ReactiveFormsModule,
-    RouterLink,
-    MatButtonModule,
-    MatCardModule,
-    MatFormFieldModule,
-    MatIconModule,
-    MatInputModule,
-  ],
+  imports: [MatProgressSpinnerModule],
   template: `
-    <mat-card class="login-card" appearance="outlined">
-      <mat-card-header>
-        <mat-card-title>Log in</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <form [formGroup]="form" (ngSubmit)="submit()">
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Email</mat-label>
-            <input matInput type="email" formControlName="email" autocomplete="email" required />
-            @if (form.controls.email.invalid && form.controls.email.touched) {
-              <mat-error>Enter a valid email address.</mat-error>
-            }
-          </mat-form-field>
-
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Password</mat-label>
-            <input
-              matInput
-              [type]="showPassword() ? 'text' : 'password'"
-              formControlName="password"
-              autocomplete="current-password"
-              required
-            />
-            <button
-              mat-icon-button
-              matSuffix
-              type="button"
-              (click)="showPassword.set(!showPassword())"
-              [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
-            >
-              <mat-icon>{{ showPassword() ? 'visibility_off' : 'visibility' }}</mat-icon>
-            </button>
-            @if (form.controls.password.invalid && form.controls.password.touched) {
-              <mat-error>Enter your password.</mat-error>
-            }
-          </mat-form-field>
-
-          @if (errorMessage()) {
-            <p class="error-banner" role="alert">{{ errorMessage() }}</p>
-          }
-
-          <button
-            mat-flat-button
-            color="primary"
-            type="submit"
-            class="full-width submit-button"
-            [disabled]="form.invalid || submitting()"
-          >
-            {{ submitting() ? 'Signing in…' : 'Log in' }}
-          </button>
-        </form>
-
-        <p class="secondary-links">
-          <a routerLink="/forgot-password">Forgot password?</a>
-          <span>&middot;</span>
-          <a routerLink="/register">Create an account</a>
-        </p>
-      </mat-card-content>
-    </mat-card>
+    <div class="redirecting">
+      <mat-spinner diameter="32" />
+      <p>Taking you to log in&hellip;</p>
+    </div>
   `,
   styles: `
-    .login-card {
-      max-width: 400px;
-      margin: 48px auto;
-    }
-
-    .full-width {
-      width: 100%;
-    }
-
-    .submit-button {
-      margin-top: 8px;
-    }
-
-    .error-banner {
-      color: var(--mat-sys-error);
-      font-size: 0.875rem;
-      margin: 0 0 8px;
-    }
-
-    .secondary-links {
+    .redirecting {
       display: flex;
-      justify-content: space-between;
-      margin-top: 16px;
-      font-size: 0.875rem;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 64px 16px;
+      text-align: center;
+      color: var(--mat-sys-on-surface-variant);
     }
   `,
 })
 export class LoginPage {
-  private readonly authService = inject(AuthService);
-  private readonly router = inject(Router);
+  private readonly auth0 = inject(Auth0Service);
   private readonly route = inject(ActivatedRoute);
 
-  protected readonly form = new FormGroup({
-    email: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.email] }),
-    password: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
-  });
-
-  protected readonly submitting = signal(false);
-  protected readonly showPassword = signal(false);
-  protected readonly errorMessage = signal<string | null>(null);
-
-  protected submit(): void {
-    if (this.form.invalid || this.submitting()) return;
-
-    this.submitting.set(true);
-    this.errorMessage.set(null);
-
-    this.authService.login(this.form.getRawValue()).subscribe({
-      next: () => {
-        const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-        void this.router.navigateByUrl(returnUrl || '/classes');
-      },
-      error: (err: HttpErrorResponse) => {
-        this.submitting.set(false);
-        this.errorMessage.set(
-          (err.error as { message?: string } | null)?.message ?? 'Something went wrong. Please try again.',
-        );
-      },
-    });
+  constructor() {
+    const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') ?? undefined;
+    void this.auth0.loginWithRedirect({ appState: { target: returnUrl } });
   }
 }

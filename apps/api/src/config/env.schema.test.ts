@@ -8,8 +8,8 @@ const base = {
   API_PUBLIC_URL: 'http://localhost:3000',
   DATABASE_URL: 'postgresql://u:p@localhost:5433/db',
   REDIS_URL: 'redis://localhost:6380',
-  JWT_ACCESS_SECRET: 'a'.repeat(32),
-  JWT_REFRESH_SECRET: 'b'.repeat(32),
+  AUTH0_DOMAIN: 'frntdesk-dev.us.auth0.com',
+  AUTH0_AUDIENCE: 'https://api.frntdesk.zm',
   MAIL_TRANSPORT: 'smtp',
   MAIL_FROM: 'FRNTDesk <no-reply@frntdesk.local>',
   SMTP_HOST: 'localhost',
@@ -21,24 +21,23 @@ describe('validateEnv', () => {
     const env = validateEnv(base);
     expect(env.API_PORT).toBe(3000);
     expect(env.CURRENCY).toBe('ZMW');
-    expect(env.JWT_ACCESS_TTL).toBe('15m');
+    expect(env.LIVEKIT_TOKEN_TTL).toBe('15m');
   });
 
-  it('rejects a short JWT secret', () => {
-    expect(() => validateEnv({ ...base, JWT_ACCESS_SECRET: 'too-short' })).toThrow(
-      /JWT_ACCESS_SECRET/,
-    );
+  it('requires an Auth0 domain and audience', () => {
+    expect(() => validateEnv({ ...base, AUTH0_DOMAIN: '' })).toThrow(/AUTH0_DOMAIN/);
+    expect(() => validateEnv({ ...base, AUTH0_AUDIENCE: '' })).toThrow(/AUTH0_AUDIENCE/);
   });
 
   it('reports every problem at once rather than one per boot', () => {
     // A misconfigured deploy should be fixable in a single pass.
     try {
-      validateEnv({ ...base, JWT_ACCESS_SECRET: 'x', JWT_REFRESH_SECRET: 'y' });
+      validateEnv({ ...base, AUTH0_DOMAIN: '', AUTH0_AUDIENCE: '' });
       expect.unreachable('should have thrown');
     } catch (error) {
       const message = (error as Error).message;
-      expect(message).toContain('JWT_ACCESS_SECRET');
-      expect(message).toContain('JWT_REFRESH_SECRET');
+      expect(message).toContain('AUTH0_DOMAIN');
+      expect(message).toContain('AUTH0_AUDIENCE');
     }
   });
 

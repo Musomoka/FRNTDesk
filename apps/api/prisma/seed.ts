@@ -1,8 +1,6 @@
 import { config } from 'dotenv';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
-import argon2 from 'argon2';
-import { randomUUID } from 'node:crypto';
 
 config({ path: ['../../.env', '.env'], quiet: true });
 
@@ -11,8 +9,12 @@ config({ path: ['../../.env', '.env'], quiet: true });
  * database, so it can be used to top up a local environment rather than only
  * to fill an empty one.
  *
- * Refuses to run against production: this creates accounts with known
- * passwords.
+ * Seeded users have no credentials of their own — identity is Auth0's job.
+ * These rows exist with `auth0Sub: null`, and get claimed automatically the
+ * first time someone logs in via Auth0 Universal Login using the matching
+ * email (see apps/api/src/auth/auth.service.ts's `syncUser` — it links by
+ * email whenever `auth0Sub` is still null). To use the seeded "host" demo
+ * data locally, sign up in Auth0 with `host@frntdesk.local`.
  */
 async function main(): Promise<void> {
   if (process.env['NODE_ENV'] === 'production') {
@@ -23,16 +25,16 @@ async function main(): Promise<void> {
   if (!connectionString) throw new Error('DATABASE_URL is not set.');
 
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-  const password = await argon2.hash('frntdesk-dev-password');
 
   const host = await prisma.user.upsert({
     where: { email: 'host@frntdesk.local' },
     update: {},
     create: {
       email: 'host@frntdesk.local',
-      passwordHash: password,
       displayName: 'Chanda Mwale',
       phoneE164: '+260966123456',
+      // Pre-verified so the seeded classrooms are publish-able without also
+      // needing to drive Auth0's own email-verification flow locally.
       emailVerifiedAt: new Date(),
     },
   });
@@ -42,7 +44,6 @@ async function main(): Promise<void> {
     update: {},
     create: {
       email: 'student@frntdesk.local',
-      passwordHash: password,
       displayName: 'Mutale Banda',
       phoneE164: '+260977123456',
       emailVerifiedAt: new Date(),
@@ -97,9 +98,10 @@ async function main(): Promise<void> {
   });
 
   console.log('Seeded:');
-  console.log(`  host    host@frntdesk.local    / frntdesk-dev-password  (${host.id})`);
-  console.log(`  student student@frntdesk.local / frntdesk-dev-password  (${student.id})`);
-  console.log(`  2 published classrooms, 1 upcoming session`);
+  console.log(`  host    host@frntdesk.local    — not yet linked to Auth0 (${host.id})`);
+  console.log(`  student student@frntdesk.local — not yet linked to Auth0 (${student.id})`);
+  console.log('  Sign up in Auth0 Universal Login with either email to claim that row.');
+  console.log('  2 published classrooms, 1 upcoming session');
 
   await prisma.$disconnect();
 }

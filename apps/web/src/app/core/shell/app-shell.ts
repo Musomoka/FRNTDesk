@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { AuthService } from '../auth/auth.service';
+import { AuthService as Auth0Service } from '@auth0/auth0-angular';
 import { AuthStore } from '../auth/auth-store';
 
 interface NavDestination {
@@ -173,12 +173,12 @@ interface NavDestination {
 })
 export class AppShell {
   protected readonly auth = inject(AuthStore);
-  private readonly authService = inject(AuthService);
+  private readonly auth0 = inject(Auth0Service);
 
   protected logout(): void {
-    // AuthService clears local state itself even if the network call fails;
-    // the shell just needs to trigger it.
-    this.authService.logout().subscribe();
+    // Clears Auth0's own session too (not just this app's), so a re-visit
+    // doesn't silently restore it via a still-valid refresh token.
+    this.auth0.logout({ logoutParams: { returnTo: window.location.origin } }).subscribe();
   }
 
   protected readonly destinations: readonly NavDestination[] = [

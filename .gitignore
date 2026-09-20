@@ -9,6 +9,11 @@ coverage/
 .env.*
 !.env.example
 
+# Generated from .env by apps/web/scripts/generate-environment.cjs — contains
+# no secrets (Auth0 SPA config is meant to be public), but is derived, not
+# authored, so it's regenerated locally rather than committed.
+apps/web/src/environment.ts
+
 .DS_Store
 *.log
 npm-debug.log*

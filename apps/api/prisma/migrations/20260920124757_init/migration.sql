@@ -1,7 +1,4 @@
 -- CreateEnum
-CREATE TYPE "VerificationPurpose" AS ENUM ('EMAIL_VERIFICATION', 'PASSWORD_RESET');
-
--- CreateEnum
 CREATE TYPE "ClassroomStatus" AS ENUM ('DRAFT', 'PUBLISHED', 'CANCELLED');
 
 -- CreateEnum
@@ -38,7 +35,7 @@ CREATE TYPE "AccessGrant" AS ENUM ('ENROLLMENT', 'PURCHASE');
 CREATE TABLE "User" (
     "id" UUID NOT NULL,
     "email" TEXT NOT NULL,
-    "passwordHash" TEXT NOT NULL,
+    "auth0Sub" TEXT,
     "displayName" TEXT NOT NULL,
     "phoneE164" TEXT,
     "emailVerifiedAt" TIMESTAMP(3),
@@ -46,34 +43,6 @@ CREATE TABLE "User" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "RefreshToken" (
-    "id" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "tokenHash" TEXT NOT NULL,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "revokedAt" TIMESTAMP(3),
-    "replacedById" UUID,
-    "userAgent" TEXT,
-    "ip" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "RefreshToken_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "VerificationToken" (
-    "id" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "purpose" "VerificationPurpose" NOT NULL,
-    "tokenHash" TEXT NOT NULL,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "consumedAt" TIMESTAMP(3),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "VerificationToken_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -228,22 +197,10 @@ CREATE TABLE "RecordingAccess" (
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "User_auth0Sub_key" ON "User"("auth0Sub");
+
+-- CreateIndex
 CREATE INDEX "User_email_idx" ON "User"("email");
-
--- CreateIndex
-CREATE UNIQUE INDEX "RefreshToken_tokenHash_key" ON "RefreshToken"("tokenHash");
-
--- CreateIndex
-CREATE INDEX "RefreshToken_userId_idx" ON "RefreshToken"("userId");
-
--- CreateIndex
-CREATE INDEX "RefreshToken_expiresAt_idx" ON "RefreshToken"("expiresAt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "VerificationToken_tokenHash_key" ON "VerificationToken"("tokenHash");
-
--- CreateIndex
-CREATE INDEX "VerificationToken_userId_purpose_idx" ON "VerificationToken"("userId", "purpose");
 
 -- CreateIndex
 CREATE INDEX "Classroom_hostId_idx" ON "Classroom"("hostId");
@@ -319,12 +276,6 @@ CREATE INDEX "RecordingAccess_userId_idx" ON "RecordingAccess"("userId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "RecordingAccess_recordingId_userId_key" ON "RecordingAccess"("recordingId", "userId");
-
--- AddForeignKey
-ALTER TABLE "RefreshToken" ADD CONSTRAINT "RefreshToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "VerificationToken" ADD CONSTRAINT "VerificationToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Classroom" ADD CONSTRAINT "Classroom_hostId_fkey" FOREIGN KEY ("hostId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

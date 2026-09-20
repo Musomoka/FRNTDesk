@@ -2,7 +2,6 @@ import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import type { Env } from './config/env.schema.js';
@@ -13,13 +12,13 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix('api');
   app.use(helmet());
-  app.use(cookieParser());
 
-  // Credentials are on: the refresh token travels as an httpOnly cookie, so the
-  // browser must be allowed to send it cross-origin to the API.
+  // No cookies to carry: Auth0's SDK holds its own session client-side and
+  // attaches the access token via an Authorization header, so `credentials`
+  // doesn't need to be on here the way it did for the old cookie-based
+  // refresh token.
   app.enableCors({
     origin: config.get('WEB_ORIGIN', { infer: true }),
-    credentials: true,
   });
 
   // No global validation pipe: payloads are validated per route against the

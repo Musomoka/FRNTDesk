@@ -1,43 +1,81 @@
-import { Injectable, computed, signal } from '@angular/core';
-import type { AuthSession, UserProfile } from '@frntdesk/shared';
+import { HttpClient } from '@angular/common/http';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { AuthService as Auth0Service } from '@auth0/auth0-angular';
+import { map, of, switchMap, take } from 'rxjs';
+import type { UserProfile } from '@frntdesk/shared';
 
 /**
- * Root-provided, signal-based session state — the one piece of cross-cutting
- * state in the app. Guards, the shell, and the HTTP layer all read from this
- * rather than each holding their own copy.
+ * Root-provided session state, wrapping Auth0's own `AuthService` — the rest
+ * of the app (guards, the shell) reads this signal-based surface rather than
+ * Auth0's RxJS observables directly, so nothing else needed to change when
+ * identity moved from our own JWT/refresh-cookie system to Auth0.
  *
- * No NgRx: at this app's size, a single store plus per-feature signals (e.g.
- * checkout's payment-poll state, the live room's participant list) is
- * sufficient. Introduce a heavier store only if state genuinely needs to be
- * shared across more than a couple of features.
+ * Two pieces of state settle at different speeds, and that difference is
+ * deliberate, not a bug to paper over:
  *
- * The access token lives only in memory (never localStorage — that's an XSS
- * exfiltration target) and is lost on a hard refresh by design. The httpOnly
- * refresh cookie is what survives a reload; `AuthService.tryRestoreSession()`
- * exchanges it for a fresh access token during app bootstrap (see
- * app.config.ts's `provideAppInitializer`), before any route or guard runs.
+ *   `isAuthenticated` — sourced directly from Auth0's own `isAuthenticated$`.
+ *   Authoritative and immediate the moment `ready()` flips true. Every guard
+ *   gates on THIS, never on `currentUser`.
+ *
+ *   `currentUser` — our own backend's view (has the internal UUID `id` every
+ *   other table's foreign keys point at, which Auth0's `sub` is not). It's
+ *   populated by a `POST /api/auth/sync` call made only after Auth0 already
+ *   says authenticated, so it necessarily lags by one local network
+ *   round-trip. Nothing gates access on it; features that need the internal
+ *   `id` (host tools, checkout) aren't built yet, and when they are, they
+ *   read `currentUser()` knowing it can briefly be null right after login.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthStore {
-  private readonly _currentUser = signal<UserProfile | null>(null);
-  private readonly _accessToken = signal<string | null>(null);
+  private readonly auth0 = inject(Auth0Service);
+  private readonly http = inject(HttpClient);
 
-  readonly currentUser = this._currentUser.asReadonly();
-  readonly isAuthenticated = computed(() => this._currentUser() !== null);
-  readonly isEmailVerified = computed(() => this._currentUser()?.emailVerifiedAt != null);
+  private readonly _profile = signal<UserProfile | null>(null);
 
-  /** Read by the HTTP interceptor to attach `Authorization: Bearer <token>`. */
-  accessToken(): string | null {
-    return this._accessToken();
+  /** Auth0 has finished its own startup check (session restore / redirect callback). */
+  readonly ready = toSignal(this.auth0.isLoading$.pipe(map((loading) => !loading)), {
+    initialValue: false,
+  });
+
+  readonly isAuthenticated = toSignal(this.auth0.isAuthenticated$, { initialValue: false });
+  readonly currentUser = this._profile.asReadonly();
+  readonly isEmailVerified = computed(() => this._profile()?.emailVerifiedAt != null);
+
+  constructor() {
+    effect(() => {
+      if (!this.ready()) return;
+
+      if (this.isAuthenticated()) {
+        if (!this._profile()) this.syncProfile();
+      } else {
+        this._profile.set(null);
+      }
+    });
   }
 
-  setSession(session: AuthSession): void {
-    this._currentUser.set(session.user);
-    this._accessToken.set(session.accessToken);
-  }
-
-  clear(): void {
-    this._currentUser.set(null);
-    this._accessToken.set(null);
+  /**
+   * Upserts our local User row from Auth0's ID token claims and populates
+   * `currentUser`. `email`/`displayName`/`emailVerified` are trusted only as
+   * profile metadata by the backend — the request itself is what's
+   * authoritative, verified via the bearer token Auth0's HTTP interceptor
+   * attaches automatically (see app.config.ts's `httpInterceptor.allowedList`).
+   */
+  private syncProfile(): void {
+    this.auth0.user$
+      .pipe(
+        take(1),
+        switchMap((user) => {
+          if (!user?.email) return of(null);
+          return this.http.post<UserProfile>('/api/auth/sync', {
+            email: user.email,
+            displayName: user.name ?? user.email,
+            emailVerified: user.email_verified ?? false,
+          });
+        }),
+      )
+      .subscribe((profile) => {
+        if (profile) this._profile.set(profile);
+      });
   }
 }

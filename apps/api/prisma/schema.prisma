@@ -24,15 +24,27 @@ datasource db {
 // Identity
 // ---------------------------------------------------------------------------
 
+/// Identity is owned by Auth0, not this table. `auth0Sub` is the Auth0 "sub"
+/// claim (e.g. `auth0|abc123`, `google-oauth2|456`) and is the row's real key
+/// for authentication purposes; `id` remains the UUID every other table's
+/// foreign keys point at, so nothing else in the schema needed to change.
+///
+/// `auth0Sub` is nullable to support just-in-time provisioning *and* linking:
+/// a row can exist (e.g. from a demo seed) before anyone has ever logged in
+/// as it, and gets its `auth0Sub` attached on first real Auth0 login by email
+/// match. See apps/api/src/auth/auth.service.ts for that logic — it only
+/// backfills a row whose `auth0Sub` is still null, precisely so this can never
+/// silently reassign an already-linked identity.
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  email        String    @unique
-  passwordHash String
-  displayName  String
-  phoneE164    String?
+  id          String  @id @default(uuid()) @db.Uuid
+  email       String  @unique
+  auth0Sub    String? @unique
+  displayName String
+  phoneE164   String?
 
-  // Gates class hosting: an unverified account cannot publish to the catalog,
-  // which is what keeps spam classes out of it.
+  // Sourced from Auth0's `email_verified` claim on each sync, not our own
+  // verification flow — gates class hosting: an unverified account cannot
+  // publish to the catalog, which is what keeps spam classes out of it.
   emailVerifiedAt DateTime?
 
   createdAt DateTime @default(now())
@@ -46,49 +58,8 @@ model User {
   invitationsUsed  Invitation[]       @relation("InvitationAcceptor")
   participations   ClassParticipant[]
   recordingAccess  RecordingAccess[]
-  refreshTokens    RefreshToken[]
-  verificationTokens VerificationToken[]
 
   @@index([email])
-}
-
-/// Rotating refresh tokens. A token that is presented after being replaced is
-/// treated as theft: the whole family is revoked. `replacedById` is what makes
-/// that chain reconstructible.
-model RefreshToken {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @db.Uuid
-  tokenHash String    @unique
-  expiresAt DateTime
-  revokedAt DateTime?
-  replacedById String? @db.Uuid
-  userAgent String?
-  ip        String?
-  createdAt DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([expiresAt])
-}
-
-enum VerificationPurpose {
-  EMAIL_VERIFICATION
-  PASSWORD_RESET
-}
-
-model VerificationToken {
-  id        String              @id @default(uuid()) @db.Uuid
-  userId    String              @db.Uuid
-  purpose   VerificationPurpose
-  tokenHash String              @unique
-  expiresAt DateTime
-  consumedAt DateTime?
-  createdAt DateTime            @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, purpose])
 }
 
 // ---------------------------------------------------------------------------

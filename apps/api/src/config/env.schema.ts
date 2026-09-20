@@ -24,10 +24,13 @@ export const envSchema = z
     DATABASE_URL: z.string().min(1),
     REDIS_URL: z.string().min(1),
 
-    JWT_ACCESS_SECRET: z.string().min(32, 'Use at least 32 characters; generate with `openssl rand -base64 48`.'),
-    JWT_REFRESH_SECRET: z.string().min(32, 'Use at least 32 characters; generate with `openssl rand -base64 48`.'),
-    JWT_ACCESS_TTL: durationSchema.default('15m'),
-    JWT_REFRESH_TTL: durationSchema.default('30d'),
+    // Identity is Auth0's job. The API only needs enough to verify an
+    // incoming access token: whose tenant issued it (AUTH0_DOMAIN, used to
+    // build the JWKS/issuer URL) and which API it was issued for
+    // (AUTH0_AUDIENCE, the Identifier of the API registered in that tenant).
+    // No client secret belongs here — the SPA flow never has one.
+    AUTH0_DOMAIN: z.string().min(1, 'e.g. your-tenant.us.auth0.com'),
+    AUTH0_AUDIENCE: z.string().min(1, 'The API Identifier from Auth0 > Applications > APIs.'),
 
     MAIL_TRANSPORT: z.enum(['smtp', 'resend']).default('smtp'),
     MAIL_FROM: z.string().min(3),
