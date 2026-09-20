@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to the same branch makes the in-flight run redundant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22.22.3'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: frntdesk
+          POSTGRES_PASSWORD: frntdesk
+          POSTGRES_DB: frntdesk
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U frntdesk -d frntdesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6380:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://frntdesk:frntdesk@localhost:5433/frntdesk?schema=public
+      REDIS_URL: redis://localhost:6380
+      NODE_ENV: test
+      WEB_ORIGIN: http://localhost:4200
+      API_PUBLIC_URL: http://localhost:3000
+      # Test-only values. Length is what the schema checks, so these are
+      # deliberately long and obviously non-secret.
+      JWT_ACCESS_SECRET: ci-access-secret-not-used-anywhere-real-000000
+      JWT_REFRESH_SECRET: ci-refresh-secret-not-used-anywhere-real-00000
+      MAIL_TRANSPORT: smtp
+      MAIL_FROM: FRNTDesk <no-reply@frntdesk.test>
+      SMTP_HOST: localhost
+      SMTP_PORT: '1025'
+      PROVIDER_FAKE_ENABLED: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The API and the web app both import @frntdesk/shared from dist, so it
+      # has to be compiled before anything that depends on it is checked.
+      - name: Build shared package
+        run: npm run build --workspace @frntdesk/shared
+
+      - name: Generate Prisma client
+        run: npm run db:generate --workspace @frntdesk/api
+
+      - name: Apply migrations
+        run: npm run db:deploy --workspace @frntdesk/api
+
+      - name: Typecheck
+        run: npm run typecheck --workspaces --if-present
+
+      - name: Test
+        run: npm run test --workspaces --if-present
+
+      - name: Build
+        run: npm run build --workspaces --if-present
+
+      # Guards the three version pins that Angular 22 constrains. A transitive
+      # bump onto TypeScript 7 or vitest 5 breaks the Angular build in a way
+      # that is much cheaper to catch here than in a developer's working tree.
+      - name: Verify pinned toolchain versions
+        run: |
+          set -e
+          TS=$(node -p "require('typescript/package.json').version")
+          VITEST=$(node -p "require('vitest/package.json').version")
+          PRISMA=$(node -p "require('@prisma/client/package.json').version")
+          echo "typescript=$TS vitest=$VITEST prisma=$PRISMA"
+          case "$TS" in 6.0.*) ;; *) echo "::error::Angular 22 requires TypeScript >=6.0 <6.1, found $TS"; exit 1;; esac
+          case "$VITEST" in 4.*) ;; *) echo "::error::Angular 22 requires vitest 4.x, found $VITEST"; exit 1;; esac
+          case "$PRISMA" in 7.*) ;; *) echo "::error::Prisma must stay on 7.x stable, found $PRISMA"; exit 1;; esac

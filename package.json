@@ -1,0 +1,35 @@
+{
+  "name": "frntdesk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Host and attend paid, live classroom-style video tutorials.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev": "npm run dev --workspace @frntdesk/api & npm run start --workspace @frntdesk/web",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v && docker compose up -d",
+    "db:migrate": "npm run db:migrate --workspace @frntdesk/api",
+    "db:generate": "npm run db:generate --workspace @frntdesk/api",
+    "db:studio": "npm run db:studio --workspace @frntdesk/api",
+    "db:seed": "npm run db:seed --workspace @frntdesk/api",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "vitest": "4.1.11",
+    "typescript": "6.0.3"
+  }
+}

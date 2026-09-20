@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: frntdesk-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: frntdesk
+      POSTGRES_PASSWORD: frntdesk
+      POSTGRES_DB: frntdesk
+    ports:
+      - '5433:5432'
+    volumes:
+      # Postgres 18+ images store data in a major-version subdirectory, so the
+      # mount belongs at /var/lib/postgresql, not .../data. Mounting the old
+      # path makes the container refuse to start.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U frntdesk -d frntdesk']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: frntdesk-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6380:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Catches MTN/Airtel callbacks during local development. The providers cannot
+  # reach localhost, so point X-Callback-Url at a tunnel (ngrok/cloudflared) that
+  # forwards to the API, and use this only to eyeball raw payloads.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: frntdesk-mailpit
+    restart: unless-stopped
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # web UI
+    environment:
+      MP_MAX_MESSAGES: 500
+
+volumes:
+  postgres-data:
+  redis-data:

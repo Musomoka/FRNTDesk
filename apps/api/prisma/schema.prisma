@@ -1,0 +1,395 @@
+// FRNTDesk data model.
+//
+// Conventions that hold throughout:
+//   * Money is always an Int of minor units (ngwee; 100 to the kwacha). No
+//     Float or Decimal goes anywhere near a balance.
+//   * Secrets (refresh tokens, invitation tokens, verification tokens) are
+//     stored only as SHA-256 hashes. The plaintext exists in an email or a
+//     cookie and nowhere else.
+//   * Payment state is advanced exclusively through the guarded state machine
+//     in @frntdesk/shared, and never without an accompanying PaymentEvent row.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7 removed `url` from the datasource block. The connection string for
+// Migrate lives in prisma.config.ts; the runtime client gets a pg driver
+// adapter (see src/prisma/prisma.service.ts).
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String
+  displayName  String
+  phoneE164    String?
+
+  // Gates class hosting: an unverified account cannot publish to the catalog,
+  // which is what keeps spam classes out of it.
+  emailVerifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Hosting is per-classroom, not a global role, so there is no host flag here.
+  hostedClassrooms Classroom[]        @relation("ClassroomHost")
+  enrollments      Enrollment[]
+  payments         Payment[]
+  invitationsSent  Invitation[]       @relation("InvitationSender")
+  invitationsUsed  Invitation[]       @relation("InvitationAcceptor")
+  participations   ClassParticipant[]
+  recordingAccess  RecordingAccess[]
+  refreshTokens    RefreshToken[]
+  verificationTokens VerificationToken[]
+
+  @@index([email])
+}
+
+/// Rotating refresh tokens. A token that is presented after being replaced is
+/// treated as theft: the whole family is revoked. `replacedById` is what makes
+/// that chain reconstructible.
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  replacedById String? @db.Uuid
+  userAgent String?
+  ip        String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum VerificationPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model VerificationToken {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @db.Uuid
+  purpose   VerificationPurpose
+  tokenHash String              @unique
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+}
+
+// ---------------------------------------------------------------------------
+// Classes
+// ---------------------------------------------------------------------------
+
+enum ClassroomStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
+/// The offering a host publishes and prices.
+model Classroom {
+  id            String          @id @default(uuid()) @db.Uuid
+  hostId        String          @db.Uuid
+  title         String
+  description   String
+  priceMinor    Int
+  currency      String          @default("ZMW")
+  capacity      Int             @default(100)
+  coverImageUrl String?
+  status        ClassroomStatus @default(DRAFT)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  host        User          @relation("ClassroomHost", fields: [hostId], references: [id], onDelete: Restrict)
+  sessions    ClassSession[]
+  enrollments Enrollment[]
+  invitations Invitation[]
+  payments    Payment[]
+
+  @@index([hostId])
+  @@index([status, createdAt])
+}
+
+enum ClassSessionStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+/// One scheduled occurrence of a Classroom. Separate from Classroom because a
+/// replay is sold per session and therefore needs its own identity.
+model ClassSession {
+  id          String             @id @default(uuid()) @db.Uuid
+  classroomId String             @db.Uuid
+  title       String?
+  startsAt    DateTime
+  endsAt      DateTime
+  status      ClassSessionStatus @default(SCHEDULED)
+
+  /// LiveKit room name. Unique so a room can never be shared by two sessions.
+  livekitRoom String   @unique
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  classroom    Classroom          @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  participants ClassParticipant[]
+  recording    Recording?
+
+  @@index([classroomId, startsAt])
+  @@index([status, startsAt])
+}
+
+enum EnrollmentStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  CANCELLED
+  REFUNDED
+}
+
+/// An ACTIVE enrollment is the sole thing that entitles a user to a join token.
+model Enrollment {
+  id          String           @id @default(uuid()) @db.Uuid
+  classroomId String           @db.Uuid
+  userId      String           @db.Uuid
+  status      EnrollmentStatus @default(PENDING_PAYMENT)
+  activatedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  classroom Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([classroomId, userId])
+  @@index([userId, status])
+}
+
+enum InvitationStatus {
+  SENT
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+/// Only the hash of the invite token is stored; the plaintext lives in the
+/// email and nowhere else. `comp` waives payment for guests and scholarships.
+model Invitation {
+  id          String           @id @default(uuid()) @db.Uuid
+  classroomId String           @db.Uuid
+  email       String
+  tokenHash   String           @unique
+  invitedById String           @db.Uuid
+  status      InvitationStatus @default(SENT)
+  comp        Boolean          @default(false)
+  message     String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  acceptedById String?         @db.Uuid
+  createdAt   DateTime         @default(now())
+
+  classroom  Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  invitedBy  User      @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: Cascade)
+  acceptedBy User?     @relation("InvitationAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@unique([classroomId, email])
+  @@index([email, status])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Payments
+// ---------------------------------------------------------------------------
+
+enum PaymentProvider {
+  MTN_MOMO
+  AIRTEL_MONEY
+  FAKE
+}
+
+enum PaymentPurpose {
+  CLASS_ENROLLMENT
+  RECORDING_ACCESS
+}
+
+enum PaymentStatus {
+  INITIATED
+  PENDING
+  SUCCESSFUL
+  FAILED
+  TIMEOUT
+}
+
+/// A single collection attempt against a mobile money wallet.
+///
+/// Two unique constraints carry the safety properties:
+///   * `idempotencyKey` — a double-tapped pay button returns the original
+///     payment instead of charging twice.
+///   * `providerRef` — a replayed provider callback cannot fork a second record.
+///
+/// A CHECK constraint (added in migration SQL, since Prisma cannot express it)
+/// enforces that exactly one of classroomId / recordingId is set.
+model Payment {
+  id             String          @id @default(uuid()) @db.Uuid
+  userId         String          @db.Uuid
+  purpose        PaymentPurpose
+  classroomId    String?         @db.Uuid
+  recordingId    String?         @db.Uuid
+  amountMinor    Int
+  currency       String          @default("ZMW")
+  provider       PaymentProvider
+  status         PaymentStatus   @default(INITIATED)
+
+  /// The provider's own transaction identifier. For MTN this is the
+  /// X-Reference-Id we generate and send; for Airtel it is their transaction id.
+  providerRef    String?         @unique
+  /// Our reference, echoed back by the provider for cross-checking.
+  externalId     String          @unique
+  idempotencyKey String          @unique
+
+  payerMsisdn    String
+  failureReason  String?
+  settledAt      DateTime?
+  /// Attempts made by the reconciliation worker, for observability.
+  pollAttempts   Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  // Restrict, not SetNull: nulling these would break the CHECK constraint that
+  // keeps purpose and target consistent, and a settled payment must never be
+  // orphaned from what it bought. A classroom with payments is CANCELLED,
+  // never deleted.
+  user      User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  classroom Classroom?      @relation(fields: [classroomId], references: [id], onDelete: Restrict)
+  recording Recording?      @relation(fields: [recordingId], references: [id], onDelete: Restrict)
+  events    PaymentEvent[]
+  access    RecordingAccess[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([classroomId])
+}
+
+enum PaymentEventSource {
+  CALLBACK
+  POLL
+  MANUAL
+}
+
+/// Append-only audit trail. Payment status never changes without a row here,
+/// which is what makes a disputed charge reconstructible months later. Rows are
+/// written even for rejected transitions, so a spoofing attempt leaves a trace.
+model PaymentEvent {
+  id         String             @id @default(uuid()) @db.Uuid
+  paymentId  String             @db.Uuid
+  source     PaymentEventSource
+  /// The outcome the state machine assigned: APPLY, NOOP, or REJECT.
+  outcome    String
+  fromStatus PaymentStatus?
+  toStatus   PaymentStatus?
+  payload    Json
+  receivedAt DateTime           @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId, receivedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Live rooms and recordings
+// ---------------------------------------------------------------------------
+
+enum ParticipantRole {
+  HOST
+  CO_HOST
+  STUDENT
+}
+
+/// Live room membership, which doubles as the attendance record once the
+/// session ends.
+model ClassParticipant {
+  id             String          @id @default(uuid()) @db.Uuid
+  classSessionId String          @db.Uuid
+  userId         String          @db.Uuid
+  identity       String
+  role           ParticipantRole @default(STUDENT)
+  canPublish     Boolean         @default(false)
+  handRaisedAt   DateTime?
+  joinedAt       DateTime        @default(now())
+  leftAt         DateTime?
+
+  session ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([classSessionId, userId])
+  @@index([classSessionId, role])
+}
+
+enum RecordingStatus {
+  STARTING
+  ACTIVE
+  COMPLETE
+  FAILED
+}
+
+/// A recorded session. `priceMinor` null means the replay is not sold
+/// separately and enrolment is the only way in.
+model Recording {
+  id             String          @id @default(uuid()) @db.Uuid
+  classSessionId String          @unique @db.Uuid
+  egressId       String?         @unique
+  status         RecordingStatus @default(STARTING)
+  storageKey     String?
+  durationSec    Int?
+  sizeBytes      BigInt?
+  priceMinor     Int?
+  currency       String          @default("ZMW")
+  failureReason  String?
+  recordedAt     DateTime        @default(now())
+  completedAt    DateTime?
+
+  session  ClassSession      @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  access   RecordingAccess[]
+  payments Payment[]
+
+  @@index([status])
+}
+
+enum AccessGrant {
+  ENROLLMENT
+  PURCHASE
+}
+
+/// Who may play back a recording, and why. Kept separate from Enrollment so a
+/// replay can be sold to someone who never attended the live session.
+model RecordingAccess {
+  id          String      @id @default(uuid()) @db.Uuid
+  recordingId String      @db.Uuid
+  userId      String      @db.Uuid
+  grantedVia  AccessGrant
+  paymentId   String?     @db.Uuid
+  createdAt   DateTime    @default(now())
+
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment   Payment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([recordingId, userId])
+  @@index([userId])
+}

@@ -1,0 +1,61 @@
+{
+  "name": "@frntdesk/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@frntdesk/shared": "*",
+    "@nestjs/bullmq": "12.0.0",
+    "@nestjs/common": "12.0.3",
+    "@nestjs/config": "12.0.0",
+    "@nestjs/core": "12.0.3",
+    "@nestjs/jwt": "12.0.2",
+    "@nestjs/platform-express": "12.0.3",
+    "@nestjs/schedule": "12.0.2",
+    "@nestjs/throttler": "6.7.0",
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "argon2": "0.45.1",
+    "bullmq": "6.3.8",
+    "cookie-parser": "1.4.7",
+    "dotenv": "17.2.3",
+    "helmet": "8.1.0",
+    "ioredis": "6.0.0",
+    "livekit-server-sdk": "2.19.0",
+    "ms": "^2.1.3",
+    "nodemailer": "10.0.10",
+    "pg": "8.23.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "12.0.2",
+    "@nestjs/testing": "12.0.3",
+    "@types/cookie-parser": "1.4.9",
+    "@types/express": "5.0.3",
+    "@types/ms": "^2.1.0",
+    "@types/node": "22.15.3",
+    "@types/nodemailer": "7.0.4",
+    "@types/pg": "8.23.1",
+    "prisma": "7.10.0",
+    "tsx": "4.20.6",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  }
+}
