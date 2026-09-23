@@ -2,7 +2,8 @@
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
   "cli": {
-    "packageManager": "npm"
+    "packageManager": "npm",
+    "analytics": "34926b5e-d086-4fa7-bc53-0f0bf03fb46e"
   },
   "newProjectRoot": "projects",
   "projects": {
@@ -69,7 +70,9 @@
           },
           "defaultConfiguration": "development",
           "options": {
-            "proxyConfig": "proxy.conf.json"
+            "proxyConfig": "proxy.conf.json",
+            "host": "0.0.0.0",
+            "allowedHosts": [".trycloudflare.com"]
           }
         },
         "test": {

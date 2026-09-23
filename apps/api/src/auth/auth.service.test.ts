@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from './auth.service.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
@@ -140,5 +140,71 @@ describe('AuthService.syncUser', () => {
 
     const profile = await service.syncUser('auth0|y', body({ emailVerified: false }));
     expect(profile.emailVerifiedAt).toBeNull();
+  });
+});
+
+describe('AuthService.updateProfile', () => {
+  let seedRow: FakeUserRow;
+
+  beforeEach(() => {
+    seedRow = {
+      id: 'seed-1',
+      email: 'host@frntdesk.local',
+      auth0Sub: 'auth0|host-real-identity',
+      displayName: 'Chanda Mwale',
+      phoneE164: '+260966123456',
+      emailVerifiedAt: new Date(),
+      createdAt: new Date(),
+    };
+  });
+
+  it('updates display name and phone on the row matching the caller auth0Sub', async () => {
+    const { prisma, rows } = fakePrisma([seedRow]);
+    const service = new AuthService(prisma);
+
+    const profile = await service.updateProfile('auth0|host-real-identity', {
+      displayName: 'Chanda M.',
+      phone: '+260977654321',
+    });
+
+    expect(profile.displayName).toBe('Chanda M.');
+    expect(profile.phoneE164).toBe('+260977654321');
+    expect(rows.get('seed-1')?.displayName).toBe('Chanda M.');
+  });
+
+  it('clears the phone number when given an empty string', async () => {
+    const { prisma, rows } = fakePrisma([seedRow]);
+    const service = new AuthService(prisma);
+
+    const profile = await service.updateProfile('auth0|host-real-identity', {
+      displayName: 'Chanda Mwale',
+      phone: '',
+    });
+
+    expect(profile.phoneE164).toBeNull();
+    expect(rows.get('seed-1')?.phoneE164).toBeNull();
+  });
+
+  it('never touches email or verification state', async () => {
+    const { prisma, rows } = fakePrisma([seedRow]);
+    const service = new AuthService(prisma);
+
+    await service.updateProfile('auth0|host-real-identity', {
+      displayName: 'Chanda Mwale',
+      phone: '',
+    });
+
+    expect(rows.get('seed-1')?.email).toBe('host@frntdesk.local');
+    expect(rows.get('seed-1')?.emailVerifiedAt).toEqual(seedRow.emailVerifiedAt);
+  });
+
+  it('rejects a caller with no matching row rather than creating one', async () => {
+    const { prisma, rows } = fakePrisma([seedRow]);
+    const service = new AuthService(prisma);
+
+    await expect(
+      service.updateProfile('auth0|never-synced', { displayName: 'Someone', phone: '' }),
+    ).rejects.toThrow(NotFoundException);
+    expect(rows.size).toBe(1);
   });
 });

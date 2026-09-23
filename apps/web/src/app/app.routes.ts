@@ -15,10 +15,23 @@ import { AppShell } from './core/shell/app-shell';
  *    outside `AppShell`, giving a true chrome-free immersive view rather than
  *    a shell that merely hides its own nav.
  *
+ * That exception has to be declared FIRST. `AppShell` sits at `path: ''` with
+ * a `**` child, and a prefix match on '' means the router descends into those
+ * children for every URL — where the wildcard claims `/live/:sessionId` and
+ * renders "page not found" instead. Order is what keeps the live room
+ * reachable at all; it is not cosmetic.
+ *
  * Every feature is lazy (`loadComponent`) so `/classes` never pulls in, e.g.,
  * `livekit-client` for a route that will never open it.
  */
 export const routes: Routes = [
+  // Immersive: outside AppShell entirely — see file header for why it is first.
+  {
+    path: 'live/:sessionId',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/live-room/live-room.page').then((m) => m.LiveRoomPage),
+  },
+
   {
     path: '',
     component: AppShell,
@@ -37,6 +50,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/classroom/classroom-detail.page').then((m) => m.ClassroomDetailPage),
       },
+      {
+        path: 'organisations',
+        loadComponent: () =>
+          import('./features/organisations/organisations.page').then((m) => m.OrganisationsPage),
+      },
 
       {
         path: 'login',
@@ -48,25 +66,10 @@ export const routes: Routes = [
         canActivate: [redirectIfAuthenticatedGuard],
         loadComponent: () => import('./features/auth/register.page').then((m) => m.RegisterPage),
       },
-      {
-        path: 'forgot-password',
-        canActivate: [redirectIfAuthenticatedGuard],
-        loadComponent: () =>
-          import('./features/auth/forgot-password.page').then((m) => m.ForgotPasswordPage),
-      },
-      {
-        path: 'reset-password/:token',
-        canActivate: [redirectIfAuthenticatedGuard],
-        loadComponent: () =>
-          import('./features/auth/reset-password.page').then((m) => m.ResetPasswordPage),
-      },
-      {
-        // Not anon-only: a signed-in user can also land here (e.g. verifying
-        // a second address), so no redirect guard.
-        path: 'verify-email/:token',
-        loadComponent: () => import('./features/auth/verify-email.page').then((m) => m.VerifyEmailPage),
-      },
-
+      // No forgot-password / reset-password / verify-email routes: Auth0
+      // Universal Login owns all three end to end. Password changes go
+      // through AuthStore.requestPasswordChange from the account page, and
+      // verification is Auth0's own email — this app never sees either.
       {
         path: 'invite/:token',
         loadComponent: () =>
@@ -100,6 +103,12 @@ export const routes: Routes = [
         path: 'host/classrooms',
         canActivate: [authGuard],
         children: [
+          {
+            path: '',
+            pathMatch: 'full',
+            loadComponent: () =>
+              import('./features/host/host-classrooms.page').then((m) => m.HostClassroomsPage),
+          },
           // Literal path before the `:id` param route below it, or 'new'
           // would be swallowed as an id.
           {
@@ -187,12 +196,5 @@ export const routes: Routes = [
         loadComponent: () => import('./features/not-found/not-found.page').then((m) => m.NotFoundPage),
       },
     ],
-  },
-
-  // Immersive: outside AppShell entirely — see file header.
-  {
-    path: 'live/:sessionId',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/live-room/live-room.page').then((m) => m.LiveRoomPage),
   },
 ];

@@ -1,5 +1,5 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
-import type { SyncUserRequest, UserProfile } from '@frntdesk/shared';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import type { SyncUserRequest, UpdateProfileRequest, UserProfile } from '@frntdesk/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 /**
@@ -86,6 +86,54 @@ export class AuthService {
         },
       }),
     );
+  }
+
+  /**
+   * Account-settings edit: display name and phone only. Email, password and
+   * verification are deliberately absent — those stay Auth0's job, changed
+   * (if at all) through Universal Login / the hosted change-password flow,
+   * never through this API.
+   */
+  async updateProfile(auth0Sub: string, body: UpdateProfileRequest): Promise<UserProfile> {
+    const user = await this.prisma.user.findUnique({ where: { auth0Sub } });
+    if (!user) {
+      // Auth0Guard already verified the token; reaching here with no row
+      // means the frontend called this before its one-time `sync` call.
+      throw new NotFoundException('No profile yet — sync must run before it can be updated.');
+    }
+
+    return toUserProfile(
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          displayName: body.displayName,
+          phoneE164: body.phone === '' ? null : body.phone,
+        },
+      }),
+    );
+  }
+
+  /**
+   * Resolves the internal User row behind a verified Auth0 subject — the id
+   * every other table's foreign keys point at, which the access token itself
+   * never carries. Every authenticated feature module goes through this
+   * rather than reading `auth0Sub` off a row itself, so the "sync hasn't run
+   * yet" case has exactly one error message.
+   */
+  async requireUser(auth0Sub: string): Promise<{
+    id: string;
+    email: string;
+    displayName: string;
+    emailVerifiedAt: Date | null;
+  }> {
+    const user = await this.prisma.user.findUnique({
+      where: { auth0Sub },
+      select: { id: true, email: true, displayName: true, emailVerifiedAt: true },
+    });
+    if (!user) {
+      throw new NotFoundException('No profile yet — sync must run before this call.');
+    }
+    return user;
   }
 }
 

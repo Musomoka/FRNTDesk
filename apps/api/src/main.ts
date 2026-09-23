@@ -7,7 +7,9 @@ import { AppModule } from './app.module.js';
 import type { Env } from './config/env.schema.js';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // `rawBody` is required by LiveKit's webhook receiver: its signature is
+  // computed over the exact bytes sent, so the parsed JSON cannot verify it.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   const config = app.get(ConfigService<Env, true>);
 
   app.setGlobalPrefix('api');

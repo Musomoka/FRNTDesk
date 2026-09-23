@@ -1,0 +1,38 @@
+# Local dev only — mounted into the `livekit` container in docker-compose.yml.
+# Replaces the old `--dev` flag: egress requires Redis to coordinate with the
+# server, which --dev mode does not set up.
+
+port: 7880
+bind_addresses:
+  - 0.0.0.0
+
+redis:
+  address: redis:6379
+
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  use_external_ip: false
+  # Without this, LiveKit advertises only the container's internal Docker IP
+  # as an ICE candidate, which a browser on the host cannot route to.
+  node_ip: 127.0.0.1
+  # But 127.0.0.1 means something different depending on who's dialing it:
+  # from a host browser it's this machine; from a sibling container (the
+  # `egress` service, joining rooms as a WebRTC client to record them) it's
+  # that container itself, not LiveKit — so its media connection silently
+  # never completes. advertise_internal_ip keeps the container's own Docker
+  # IP as an additional candidate alongside node_ip, so each side's ICE
+  # negotiation picks whichever one it can actually reach.
+  advertise_internal_ip: true
+
+# Same fixed dev credentials --dev mode used, so nothing else has to change.
+keys:
+  devkey: secret
+
+# Tells LiveKit where to POST room and egress events. The API runs on the
+# host, not in Docker, so the container reaches it via the Docker Desktop
+# host gateway rather than localhost (which would mean the container itself).
+webhook:
+  api_key: devkey
+  urls:
+    - http://host.docker.internal:3000/api/live/webhook

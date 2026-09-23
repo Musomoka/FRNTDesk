@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "angular-cli": {
+      "type": "stdio",
+      "command": "sh",
+      "args": [
+        "-c",
+        "cd apps/web && npx ng mcp"
+      ]
+    }
+  }
+}

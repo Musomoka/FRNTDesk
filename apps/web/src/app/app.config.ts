@@ -2,7 +2,7 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessC
 import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { authHttpInterceptorFn, provideAuth0 } from '@auth0/auth0-angular';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { environment } from '../environment';
 import { routes } from './app.routes';
 
@@ -18,7 +18,9 @@ export const appConfig: ApplicationConfig = {
     // opens a dialog.
     provideAnimationsAsync(),
     provideHttpClient(withFetch(), withInterceptors([authHttpInterceptorFn])),
-    provideRouter(routes),
+    // Route params arrive as component `input()`s, so a page reads its own id
+    // as a signal rather than subscribing to ActivatedRoute in every feature.
+    provideRouter(routes, withComponentInputBinding()),
     provideAuth0({
       domain: environment.auth0.domain,
       clientId: environment.auth0.clientId,
@@ -33,8 +35,22 @@ export const appConfig: ApplicationConfig = {
       useRefreshTokens: true,
       cacheLocation: 'localstorage',
       // Attaches a bearer token (fetched via the above) to any request whose
-      // URL matches — our API only, never a third-party asset host.
-      httpInterceptor: { allowedList: ['/api/*'] },
+      // URL matches — our API only, never a third-party asset host. The SDK
+      // takes the *first* matching entry, so a public, unauthenticated-browse
+      // endpoint needs its own entry with `allowAnonymous: true` ahead of the
+      // catch-all — otherwise a signed-out visitor's request throws
+      // `login_required` before it ever reaches the network (it doesn't fall
+      // back to sending the request without a token).
+      // `allowAnonymous` still attaches a token when there *is* a session, so
+      // a route that is public to read but authenticated to write (enrolling
+      // from a catalog page) belongs on this list too.
+      httpInterceptor: {
+        allowedList: [
+          { uri: '/api/organisations*', allowAnonymous: true },
+          { uri: '/api/classrooms*', allowAnonymous: true },
+          '/api/*',
+        ],
+      },
     }),
   ],
 };

@@ -35,6 +35,50 @@ services:
       timeout: 5s
       retries: 10
 
+  # The SFU. Config-file mode (not --dev) because Recording egress needs
+  # Redis to coordinate with the server, which --dev mode does not set up.
+  # Fixed dev credentials (devkey / secret), no TLS, no account — see
+  # infra/livekit/livekit.yaml. Production points LIVEKIT_URL at LiveKit Cloud
+  # instead; nothing in the app knows the difference, since both speak the
+  # same protocol.
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: frntdesk-livekit
+    restart: unless-stopped
+    command: ['--config', '/etc/livekit.yaml']
+    volumes:
+      - ./infra/livekit/livekit.yaml:/etc/livekit.yaml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - '7880:7880' # signalling (HTTP/WS)
+      - '7881:7881' # WebRTC over TCP, for networks that block UDP
+      - '7882:7882/udp' # WebRTC media
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:7880']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Captures room-composite recordings and uploads them to whatever S3
+  # destination the API's StartEgressRequest specifies (MinIO locally). Talks
+  # to `livekit` over Redis for job dispatch and connects to it directly as a
+  # client to pull the tracks — see infra/livekit/egress.yaml.
+  egress:
+    image: livekit/egress:latest
+    container_name: frntdesk-egress
+    restart: unless-stopped
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress.yaml
+    volumes:
+      - ./infra/livekit/egress.yaml:/etc/egress.yaml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      livekit:
+        condition: service_healthy
+
   # Catches MTN/Airtel callbacks during local development. The providers cannot
   # reach localhost, so point X-Callback-Url at a tunnel (ngrok/cloudflared) that
   # forwards to the API, and use this only to eyeball raw payloads.
@@ -48,6 +92,47 @@ services:
     environment:
       MP_MAX_MESSAGES: 500
 
+  # S3-compatible storage for recording egress, so RECORDING_ENABLED can be
+  # exercised locally without a real cloud bucket. Console is at :9001.
+  minio:
+    # MinIO stopped publishing to Docker Hub in 2024; quay.io is the current
+    # official source for the community edition.
+    image: quay.io/minio/minio:latest
+    container_name: frntdesk-minio
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: frntdesk
+      MINIO_ROOT_PASSWORD: frntdesk123
+    ports:
+      - '9000:9000' # S3 API
+      - '9001:9001' # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: creates the recordings bucket and opens it to anonymous reads,
+  # since RecordingsService builds playback URLs directly rather than signing
+  # them. Runs once per `docker compose up` and exits; failures here just mean
+  # you create the bucket by hand in the console at :9001.
+  minio-init:
+    image: quay.io/minio/mc:latest
+    container_name: frntdesk-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 frntdesk frntdesk123 &&
+      (mc mb local/frntdesk-recordings || true) &&
+      mc anonymous set download local/frntdesk-recordings
+      "
+
 volumes:
   postgres-data:
   redis-data:
+  minio-data:

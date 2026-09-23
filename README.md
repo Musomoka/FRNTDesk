@@ -107,6 +107,38 @@ hosted Universal Login page, then back. Nothing here ever sees a password.
   the schema still has an internal UUID to hang foreign keys off, since
   Auth0's own user id (`auth0|...`, `google-oauth2|...`) is never used as one.
 
+## What's built
+
+| Area | API | Web |
+| --- | --- | --- |
+| Identity | `auth/` — Auth0 JIT provisioning, account linking | Login redirect, account page |
+| Catalog | `classrooms/` — catalog, detail, sessions, enrollment | `/classes`, class detail, My Classes |
+| Hosting | `classrooms/` host routes — CRUD, publish, schedule, roster | `/host/classrooms` + manage tabs |
+| Organisations | `organisations/` — businesses/schools and their sub-courses | `/organisations` |
+| Payments | `payments/` — checkout, guarded state machine, BullMQ reconciliation | Checkout with live polling |
+| Invitations | `invitations/` — tokenized invites, email, redemption | Invite composer, invite landing |
+| Live | `live/` — LiveKit tokens, promote, webhook | Live room: screen share + camera, chat, hand-raise |
+| Replays | `recordings/` — library, entitlement, pricing | Library, replay player |
+
+**Live video runs locally.** `npm run infra:up` starts a LiveKit server in dev
+mode alongside Postgres and Redis, so screen sharing and camera work with no
+cloud account and no keys to buy. Production points `LIVEKIT_URL` at LiveKit
+Cloud instead and fills in real credentials; nothing in the app knows the
+difference. If the three `LIVEKIT_*` values are missing, every live endpoint
+returns 503 naming them rather than failing somewhere inside the SDK.
+
+**Replay capture** (LiveKit egress → S3) is gated behind `RECORDING_ENABLED`
+and is deliberately not wired up: with no bucket configured there is nothing to
+write to, and an egress that dies mid-session is worse than one that never
+started. The read side (library, entitlement, pricing) is complete, so
+recordings play as soon as rows exist.
+
+Payments run end to end locally on `PROVIDER_FAKE_ENABLED=true`: the fake
+provider goes PENDING first and only settles on a later status poll, so the
+reconciliation path is exercised in development rather than only in production.
+A number ending in `0` always declines, which gives the failure path a
+deterministic trigger.
+
 ## Verification
 
 ```bash
@@ -153,6 +185,37 @@ this is the one piece of the Auth0 integration with real security weight
 (getting it backwards would be an account-takeover bug), and it has direct
 unit test coverage (`apps/api/src/auth/auth.service.test.ts`) rather than
 resting on code review alone.
+
+**Screen sharing is the host's alone, and the token is what enforces it.** The
+join token grants `canPublishSources` — camera, microphone, screen share and
+screen-share audio for the host; camera and microphone only for a student who
+has been promoted to speak. LiveKit rejects a publish outside that list server
+side (`insufficient permissions`), so hiding the button is a courtesy, not the
+control. A teacher demonstrating an application publishes two video tracks at
+once; the live room separates them by `Track.Source`, never by arrival order,
+and puts the screen on the main stage with the camera as a click-to-swap inset.
+
+**`/live/:sessionId` must stay first in the route tree.** `AppShell` sits at
+`path: ''` with a `**` child, and a prefix match on `''` means the router
+descends into those children for *every* URL — where the wildcard claims the
+live route and renders "page not found". The live room is only reachable
+because its route is declared above the shell.
+
+**There is no forgot-password, reset-password or verify-email route.** Those
+existed before the Auth0 migration and were removed rather than reimplemented:
+Universal Login owns the whole credential lifecycle, password changes go
+through `AuthStore.requestPasswordChange` on the account page, and verification
+is Auth0's own email. Adding them back would mean rebuilding a system this app
+deliberately does not have.
+
+**A public-to-read endpoint needs its own `allowAnonymous` entry.** Auth0's
+HTTP interceptor (`apps/web/src/app/app.config.ts`) matches the *first* entry
+in `allowedList`, and the default behavior for a match is to demand a token —
+so a signed-out visitor hitting `/api/classrooms` gets a `login_required` error
+thrown before the request ever reaches the network. Public routes therefore sit
+above the `/api/*` catch-all with `allowAnonymous: true`. It still attaches a
+token when there is a session, which is why enrolling from a public catalog
+page works.
 
 **`npm audit` reports 4 high findings.** All are in the Prisma **CLI's**
 transitive tree (`mysql2`, `deepmerge-ts`) — a devDependency that is never

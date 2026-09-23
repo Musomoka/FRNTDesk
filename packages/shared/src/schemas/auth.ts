@@ -40,6 +40,19 @@ export const syncUserRequestSchema = z.object({
 });
 export type SyncUserRequest = z.infer<typeof syncUserRequestSchema>;
 
+/**
+ * Sent when the user edits their own account settings from the profile page.
+ * `phone` as an empty string clears the number; anything else must parse as
+ * a Zambian mobile via the same `zambianPhoneSchema` checkout validates
+ * against, so a number accepted here is guaranteed to be chargeable later.
+ * Email/password/verification stay out of this — those are Auth0's job.
+ */
+export const updateProfileRequestSchema = z.object({
+  displayName: z.string().trim().min(1).max(80),
+  phone: z.union([zambianPhoneSchema, z.literal('')]),
+});
+export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>;
+
 export const userProfileSchema = z.object({
   id: uuidSchema,
   email: z.email(),

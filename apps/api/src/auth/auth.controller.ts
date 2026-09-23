@@ -1,5 +1,5 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { syncUserRequestSchema, type UserProfile } from '@frntdesk/shared';
+import { Body, Controller, Patch, Post, UseGuards } from '@nestjs/common';
+import { syncUserRequestSchema, updateProfileRequestSchema, type UpdateProfileRequest, type UserProfile } from '@frntdesk/shared';
 import { zodBody } from '../common/pipes/zod-validation.pipe.js';
 import { Auth0Guard } from './auth0.guard.js';
 import { AuthService } from './auth.service.js';
@@ -22,5 +22,15 @@ export class AuthController {
     @Body(zodBody(syncUserRequestSchema)) body: { email: string; displayName: string; emailVerified: boolean },
   ): Promise<UserProfile> {
     return this.auth.syncUser(auth0Sub, body);
+  }
+
+  /** Account-settings edit, from the profile page. See AuthService.updateProfile. */
+  @Patch('profile')
+  @UseGuards(Auth0Guard)
+  async updateProfile(
+    @CurrentAuth0Sub() auth0Sub: string,
+    @Body(zodBody(updateProfileRequestSchema)) body: UpdateProfileRequest,
+  ): Promise<UserProfile> {
+    return this.auth.updateProfile(auth0Sub, body);
   }
 }

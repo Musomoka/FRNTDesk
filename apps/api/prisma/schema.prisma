@@ -51,15 +51,80 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Hosting is per-classroom, not a global role, so there is no host flag here.
-  hostedClassrooms Classroom[]        @relation("ClassroomHost")
+  hostedClassrooms Classroom[]             @relation("ClassroomHost")
   enrollments      Enrollment[]
   payments         Payment[]
-  invitationsSent  Invitation[]       @relation("InvitationSender")
-  invitationsUsed  Invitation[]       @relation("InvitationAcceptor")
+  invitationsSent  Invitation[]            @relation("InvitationSender")
+  invitationsUsed  Invitation[]            @relation("InvitationAcceptor")
   participations   ClassParticipant[]
   recordingAccess  RecordingAccess[]
+  organisations    OrganisationMembership[]
 
   @@index([email])
+}
+
+// ---------------------------------------------------------------------------
+// Organisations
+// ---------------------------------------------------------------------------
+
+enum OrganisationType {
+  BUSINESS
+  SCHOOL
+}
+
+enum OrganisationRole {
+  ADMIN
+  MEMBER
+}
+
+/// A business or a school. Purely an optional grouping layer above Classroom —
+/// a solo host with no organisation keeps working exactly as before.
+model Organisation {
+  id        String           @id @default(uuid()) @db.Uuid
+  name      String
+  type      OrganisationType
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  members    OrganisationMembership[]
+  subCourses SubCourse[]
+
+  @@index([type])
+}
+
+/// A user's affiliation with an organisation. Many-to-many — a tutor can
+/// belong to more than one organisation — with a role scoped to that
+/// membership rather than the user globally.
+model OrganisationMembership {
+  id             String           @id @default(uuid()) @db.Uuid
+  organisationId String           @db.Uuid
+  userId         String           @db.Uuid
+  role           OrganisationRole @default(MEMBER)
+  createdAt      DateTime         @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organisationId, userId])
+  @@index([userId])
+}
+
+/// A sub-grouping within an organisation — a team/department for a business
+/// (e.g. Finance, HR), or a course/grade/subject for a school. Every
+/// Classroom that belongs to an organisation reaches it through exactly one
+/// SubCourse; the organisation is never referenced from Classroom directly.
+model SubCourse {
+  id             String   @id @default(uuid()) @db.Uuid
+  organisationId String   @db.Uuid
+  name           String
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  classrooms   Classroom[]
+
+  @@index([organisationId])
 }
 
 // ---------------------------------------------------------------------------
@@ -76,6 +141,10 @@ enum ClassroomStatus {
 model Classroom {
   id            String          @id @default(uuid()) @db.Uuid
   hostId        String          @db.Uuid
+  /// Null for a solo host's own classroom. Set only when the class belongs to
+  /// an organisation's sub-course; the organisation itself is never stored
+  /// here directly, only reached via subCourse.
+  subCourseId   String?         @db.Uuid
   title         String
   description   String
   priceMinor    Int
@@ -87,6 +156,7 @@ model Classroom {
   updatedAt     DateTime        @updatedAt
 
   host        User          @relation("ClassroomHost", fields: [hostId], references: [id], onDelete: Restrict)
+  subCourse   SubCourse?    @relation(fields: [subCourseId], references: [id], onDelete: SetNull)
   sessions    ClassSession[]
   enrollments Enrollment[]
   invitations Invitation[]
@@ -94,6 +164,7 @@ model Classroom {
 
   @@index([hostId])
   @@index([status, createdAt])
+  @@index([subCourseId])
 }
 
 enum ClassSessionStatus {

@@ -50,13 +50,87 @@ async function main(): Promise<void> {
     },
   });
 
-  // A published, priced class with one upcoming session.
+  // A demo business and a demo school, each with two sub-courses, to exercise
+  // the organisation-owned side of the catalog alongside the solo-host classes below.
+  const business = await prisma.organisation.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000101' },
+    update: {},
+    create: {
+      id: '00000000-0000-4000-8000-000000000101',
+      name: 'Kwacha Traders Ltd',
+      type: 'BUSINESS',
+    },
+  });
+
+  const school = await prisma.organisation.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000102' },
+    update: {},
+    create: {
+      id: '00000000-0000-4000-8000-000000000102',
+      name: 'Lusaka Secondary School',
+      type: 'SCHOOL',
+    },
+  });
+
+  await prisma.organisationMembership.upsert({
+    where: { organisationId_userId: { organisationId: business.id, userId: host.id } },
+    update: {},
+    create: { organisationId: business.id, userId: host.id, role: 'ADMIN' },
+  });
+
+  const [finance, hr, grade10, maths] = await Promise.all([
+    prisma.subCourse.upsert({
+      where: { id: '00000000-0000-4000-8000-000000000201' },
+      update: {},
+      create: {
+        id: '00000000-0000-4000-8000-000000000201',
+        organisationId: business.id,
+        name: 'Finance Team',
+        description: 'Internal training for the finance department.',
+      },
+    }),
+    prisma.subCourse.upsert({
+      where: { id: '00000000-0000-4000-8000-000000000202' },
+      update: {},
+      create: {
+        id: '00000000-0000-4000-8000-000000000202',
+        organisationId: business.id,
+        name: 'HR',
+        description: 'Internal training for the HR department.',
+      },
+    }),
+    prisma.subCourse.upsert({
+      where: { id: '00000000-0000-4000-8000-000000000203' },
+      update: {},
+      create: {
+        id: '00000000-0000-4000-8000-000000000203',
+        organisationId: school.id,
+        name: 'Grade 10',
+        description: 'All Grade 10 classes.',
+      },
+    }),
+    prisma.subCourse.upsert({
+      where: { id: '00000000-0000-4000-8000-000000000204' },
+      update: {},
+      create: {
+        id: '00000000-0000-4000-8000-000000000204',
+        organisationId: school.id,
+        name: 'Mathematics',
+        description: 'Mathematics classes across grades.',
+      },
+    }),
+  ]);
+
+  // A published, priced class with one upcoming session — belongs to the
+  // Finance Team sub-course, to exercise an organisation-owned classroom
+  // alongside the fully solo-hosted one below.
   const classroom = await prisma.classroom.upsert({
     where: { id: '00000000-0000-4000-8000-000000000001' },
-    update: {},
+    update: { subCourseId: finance.id },
     create: {
       id: '00000000-0000-4000-8000-000000000001',
       hostId: host.id,
+      subCourseId: finance.id,
       title: 'Introduction to Financial Modelling',
       description:
         'A four-week practical course covering cash flow forecasting, valuation basics, and building a three-statement model from scratch.',
@@ -97,11 +171,30 @@ async function main(): Promise<void> {
     },
   });
 
+  // An ACTIVE seat is the only thing that mints a join token, so without this
+  // there is no way to open the live room as a student locally — the host
+  // would be talking to an empty room.
+  await prisma.enrollment.upsert({
+    where: { classroomId_userId: { classroomId: classroom.id, userId: student.id } },
+    update: { status: 'ACTIVE', activatedAt: new Date() },
+    create: {
+      classroomId: classroom.id,
+      userId: student.id,
+      status: 'ACTIVE',
+      activatedAt: new Date(),
+    },
+  });
+
   console.log('Seeded:');
   console.log(`  host    host@frntdesk.local    — not yet linked to Auth0 (${host.id})`);
   console.log(`  student student@frntdesk.local — not yet linked to Auth0 (${student.id})`);
   console.log('  Sign up in Auth0 Universal Login with either email to claim that row.');
   console.log('  2 published classrooms, 1 upcoming session');
+  console.log(
+    `  2 organisations (${business.name}, ${school.name}), 4 sub-courses (${finance.name}, ${hr.name}, ${grade10.name}, ${maths.name})`,
+  );
+  console.log(`  "${classroom.title}" now belongs to the ${finance.name} sub-course`);
+  console.log(`  ${student.email} holds an ACTIVE seat in it — enough to join the live room`);
 
   await prisma.$disconnect();
 }

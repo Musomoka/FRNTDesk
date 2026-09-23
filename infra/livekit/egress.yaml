@@ -1,0 +1,16 @@
+# Local dev only — mounted into the `egress` container in docker-compose.yml.
+# S3 destination credentials are not set here: they travel per-request in the
+# StartEgressRequest that LiveService.startRecording sends.
+
+log_level: info
+api_key: devkey
+api_secret: secret
+ws_url: ws://livekit:7880
+# Plain ws:// rather than wss:// between containers on the compose network —
+# this opts Chrome's internal websocket client out of requiring TLS for it.
+insecure: true
+
+redis:
+  address: redis:6379
+
+health_port: 8080

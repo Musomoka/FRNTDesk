@@ -20,6 +20,8 @@ export const createClassroomSchema = z.object({
   description: z.string().trim().min(20).max(4000),
   priceMinor: amountMinorSchema,
   currency: currencySchema.default('ZMW'),
+  /** Set only for an organisation-owned class; a solo host leaves it off. */
+  subCourseId: uuidSchema.optional(),
   /**
    * The lecture model fans out one publisher to many subscribers, so the ceiling
    * is a product decision rather than a media constraint. 500 is well inside
@@ -37,6 +39,10 @@ export const classroomSchema = z.object({
   id: uuidSchema,
   hostId: uuidSchema,
   hostDisplayName: z.string(),
+  subCourseId: uuidSchema.nullable(),
+  /** Denormalized for display, so a catalog card needs no second request. */
+  subCourseName: z.string().nullable(),
+  organisationName: z.string().nullable(),
   title: z.string(),
   description: z.string(),
   priceMinor: z.int(),
@@ -71,6 +77,19 @@ export const createSessionSchema = z
   );
 export type CreateSessionRequest = z.infer<typeof createSessionSchema>;
 
+/**
+ * Rescheduling. Deliberately not `createSessionSchema.partial()`: the create
+ * schema's cross-field checks (ends-after-starts, max 8 hours) cannot run
+ * when only one of the two is being sent, so they are re-applied server-side
+ * against the merged result instead.
+ */
+export const updateSessionSchema = z.object({
+  startsAt: isoDateTimeSchema.optional(),
+  endsAt: isoDateTimeSchema.optional(),
+  title: z.string().trim().min(3).max(120).nullable().optional(),
+});
+export type UpdateSessionRequest = z.infer<typeof updateSessionSchema>;
+
 export const classSessionSchema = z.object({
   id: uuidSchema,
   classroomId: uuidSchema,
@@ -92,6 +111,18 @@ export const enrollmentSchema = z.object({
   createdAt: isoDateTimeSchema,
 });
 export type Enrollment = z.infer<typeof enrollmentSchema>;
+
+/**
+ * One row of "My Classes". The next upcoming session travels with the
+ * enrollment so the dashboard can render a countdown and a Join button
+ * without a follow-up request per class.
+ */
+export const enrolledClassSchema = z.object({
+  enrollment: enrollmentSchema,
+  classroom: classroomSchema,
+  nextSession: classSessionSchema.nullable(),
+});
+export type EnrolledClass = z.infer<typeof enrolledClassSchema>;
 
 export const catalogQuerySchema = z.object({
   q: z.string().trim().max(120).optional(),

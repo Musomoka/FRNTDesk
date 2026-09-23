@@ -6,11 +6,19 @@ import { BehaviorSubject } from 'rxjs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AuthStore } from './auth-store';
 
+interface FakeAuth0User {
+  email?: string;
+  name?: string;
+  email_verified?: boolean;
+  sub?: string;
+  picture?: string;
+}
+
 function fakeAuth0() {
   return {
     isLoading$: new BehaviorSubject<boolean>(true),
     isAuthenticated$: new BehaviorSubject<boolean>(false),
-    user$: new BehaviorSubject<{ email?: string; name?: string; email_verified?: boolean } | null>(null),
+    user$: new BehaviorSubject<FakeAuth0User | null>(null),
   };
 }
 
@@ -104,5 +112,97 @@ describe('AuthStore', () => {
     TestBed.tick();
 
     expect(store.currentUser()).toBeNull();
+  });
+
+  describe('identityProvider and picture', () => {
+    it('reports a database-connection account as having a password', () => {
+      auth0.user$.next({ email: 'host@frntdesk.local', email_verified: true, sub: 'auth0|abc123' });
+      auth0.isAuthenticated$.next(true);
+      auth0.isLoading$.next(false);
+      TestBed.tick();
+      httpMock.expectOne('/api/auth/sync').flush(PROFILE_RESPONSE);
+      TestBed.tick();
+
+      expect(store.identityProvider()).toEqual({
+        key: 'auth0',
+        label: 'Email and password',
+        hasPassword: true,
+      });
+    });
+
+    it('reports a federated login as having no password, and exposes its picture', () => {
+      auth0.user$.next({
+        email: 'host@frntdesk.local',
+        email_verified: true,
+        sub: 'google-oauth2|456',
+        picture: 'https://example.com/avatar.png',
+      });
+      auth0.isAuthenticated$.next(true);
+      auth0.isLoading$.next(false);
+      TestBed.tick();
+      httpMock.expectOne('/api/auth/sync').flush(PROFILE_RESPONSE);
+      TestBed.tick();
+
+      expect(store.identityProvider()).toEqual({ key: 'google-oauth2', label: 'Google', hasPassword: false });
+      expect(store.picture()).toBe('https://example.com/avatar.png');
+    });
+  });
+
+  describe('saveProfile', () => {
+    it('PATCHes the profile and updates currentUser from the response', () => {
+      auth0.user$.next({ email: 'host@frntdesk.local', email_verified: true, sub: 'auth0|abc123' });
+      auth0.isAuthenticated$.next(true);
+      auth0.isLoading$.next(false);
+      TestBed.tick();
+      httpMock.expectOne('/api/auth/sync').flush(PROFILE_RESPONSE);
+      TestBed.tick();
+
+      const updated = { ...PROFILE_RESPONSE, displayName: 'Chanda M.', phoneE164: '+260966123456' };
+      let result: unknown;
+      store
+        .saveProfile({ displayName: 'Chanda M.', phone: '+260966123456' })
+        .subscribe((profile) => (result = profile));
+
+      const req = httpMock.expectOne('/api/auth/profile');
+      expect(req.request.method).toBe('PATCH');
+      expect(req.request.body).toEqual({ displayName: 'Chanda M.', phone: '+260966123456' });
+      req.flush(updated);
+
+      expect(result).toEqual(updated);
+      expect(store.currentUser()).toEqual(updated);
+    });
+  });
+
+  describe('requestPasswordChange', () => {
+    it('posts to the Auth0 dbconnections/change_password endpoint for the current email', () => {
+      auth0.user$.next({ email: 'host@frntdesk.local', email_verified: true, sub: 'auth0|abc123' });
+      auth0.isAuthenticated$.next(true);
+      auth0.isLoading$.next(false);
+      TestBed.tick();
+      httpMock.expectOne('/api/auth/sync').flush(PROFILE_RESPONSE);
+      TestBed.tick();
+
+      let completed = false;
+      store.requestPasswordChange().subscribe(() => (completed = true));
+
+      const req = httpMock.expectOne(
+        (r) => r.url.endsWith('/dbconnections/change_password'),
+      );
+      expect(req.request.body).toEqual({
+        client_id: expect.any(String),
+        email: 'host@frntdesk.local',
+        connection: 'Username-Password-Authentication',
+      });
+      req.flush('We just sent you an email to reset your password.');
+
+      expect(completed).toBe(true);
+    });
+
+    it('throws rather than call Auth0 when no email has loaded yet', () => {
+      auth0.isLoading$.next(false);
+      TestBed.tick();
+
+      expect(() => store.requestPasswordChange()).toThrow();
+    });
   });
 });

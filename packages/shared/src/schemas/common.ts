@@ -52,6 +52,12 @@ export type RecordingStatus = z.infer<typeof recordingStatusSchema>;
 
 export const currencySchema = z.enum(SUPPORTED_CURRENCIES);
 
+export const organisationTypeSchema = z.enum(['BUSINESS', 'SCHOOL']);
+export type OrganisationType = z.infer<typeof organisationTypeSchema>;
+
+export const organisationRoleSchema = z.enum(['ADMIN', 'MEMBER']);
+export type OrganisationRole = z.infer<typeof organisationRoleSchema>;
+
 /** Reusable primitives. */
 
 export const uuidSchema = z.uuid();

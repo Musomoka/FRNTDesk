@@ -41,3 +41,12 @@ export class ZodValidationPipe<T> implements PipeTransform<unknown, T> {
 export function zodBody<T>(schema: ZodType<T>): ZodValidationPipe<T> {
   return new ZodValidationPipe(schema);
 }
+
+/**
+ * The same pipe, named for where it reads from: `@Query(zodQuery(catalogQuerySchema))`.
+ * Query schemas coerce (everything arrives as a string), which is why they are
+ * separate schemas rather than the body ones reused.
+ */
+export function zodQuery<T>(schema: ZodType<T>): ZodValidationPipe<T> {
+  return new ZodValidationPipe(schema);
+}

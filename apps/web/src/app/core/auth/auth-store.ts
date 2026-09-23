@@ -2,8 +2,10 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AuthService as Auth0Service } from '@auth0/auth0-angular';
-import { map, of, switchMap, take } from 'rxjs';
-import type { UserProfile } from '@frntdesk/shared';
+import { map, Observable, of, switchMap, take } from 'rxjs';
+import type { UpdateProfileRequest, UserProfile } from '@frntdesk/shared';
+import { environment } from '../../../environment';
+import { identityProviderFromSub, type IdentityProvider } from './identity-provider';
 
 /**
  * Root-provided session state, wrapping Auth0's own `AuthService` — the rest
@@ -42,6 +44,20 @@ export class AuthStore {
   readonly currentUser = this._profile.asReadonly();
   readonly isEmailVerified = computed(() => this._profile()?.emailVerifiedAt != null);
 
+  /** Auth0's own ID token claims — used for things our backend doesn't track: avatar, sign-in method. */
+  private readonly auth0Profile = toSignal(this.auth0.user$, { initialValue: undefined });
+  readonly picture = computed(() => this.auth0Profile()?.picture ?? null);
+
+  /**
+   * Derived from the `sub` claim's `<strategy>|<id>` prefix (see
+   * identity-provider.ts) — the only way a SPA can tell a database-connection
+   * account (has a password) from a federated one (Google, etc. — doesn't)
+   * without Management API access.
+   */
+  readonly identityProvider = computed<IdentityProvider | null>(() =>
+    identityProviderFromSub(this.auth0Profile()?.sub),
+  );
+
   constructor() {
     effect(() => {
       if (!this.ready()) return;
@@ -77,5 +93,47 @@ export class AuthStore {
       .subscribe((profile) => {
         if (profile) this._profile.set(profile);
       });
+  }
+
+  /**
+   * Account-settings edit from the profile page. Updates `currentUser` from
+   * the response on success so the form reflects exactly what the backend
+   * persisted, not just what was submitted.
+   */
+  saveProfile(input: UpdateProfileRequest): Observable<UserProfile> {
+    return this.http.patch<UserProfile>('/api/auth/profile', input).pipe(
+      map((profile) => {
+        this._profile.set(profile);
+        return profile;
+      }),
+    );
+  }
+
+  /**
+   * Triggers Auth0's own "change password" email via its public
+   * `dbconnections/change_password` endpoint — unauthenticated by design (it
+   * only ever emails a reset link, never returns whether the address
+   * exists), so this never touches our API or a password directly. Only
+   * meaningful when `identityProvider()?.hasPassword` is true; the account
+   * page hides the action otherwise.
+   */
+  requestPasswordChange(): Observable<void> {
+    const email = this.auth0Profile()?.email;
+    if (!email) {
+      throw new Error('requestPasswordChange called before the Auth0 profile loaded.');
+    }
+    return this.http
+      .post(
+        `https://${environment.auth0.domain}/dbconnections/change_password`,
+        {
+          client_id: environment.auth0.clientId,
+          email,
+          // Auth0's default database connection name; would need to change
+          // here if the tenant ever renames it (see README's "Auth0 setup").
+          connection: 'Username-Password-Authentication',
+        },
+        { responseType: 'text' },
+      )
+      .pipe(map(() => undefined));
   }
 }

@@ -42,6 +42,12 @@ interface NavDestination {
               <mat-icon>settings</mat-icon>
               <span>Account</span>
             </a>
+            <!-- Hosting is per-class rather than a role, so this is offered to
+                 everyone rather than gated behind a flag the user cannot set. -->
+            <a mat-menu-item routerLink="/host/classrooms">
+              <mat-icon>cast_for_education</mat-icon>
+              <span>Teach a class</span>
+            </a>
             <button mat-menu-item (click)="logout()">
               <mat-icon>logout</mat-icon>
               <span>Log out</span>
@@ -183,6 +189,7 @@ export class AppShell {
 
   protected readonly destinations: readonly NavDestination[] = [
     { path: '/classes', icon: 'explore', label: 'Discover' },
+    { path: '/organisations', icon: 'apartment', label: 'Organisations' },
     { path: '/my-classes', icon: 'school', label: 'My Classes' },
     { path: '/library', icon: 'video_library', label: 'Library' },
     { path: '/account', icon: 'account_circle', label: 'Account' },

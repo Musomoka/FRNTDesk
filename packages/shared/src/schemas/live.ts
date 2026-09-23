@@ -20,6 +20,10 @@ export const joinTokenResponseSchema = z.object({
   role: participantRoleSchema,
   canPublish: z.boolean(),
   expiresAt: isoDateTimeSchema,
+  /** Whether this server has capture (LiveKit egress + S3) configured at all. */
+  recordingEnabled: z.boolean(),
+  /** Whether a recording is already running for this session at join time. */
+  recordingActive: z.boolean(),
 });
 export type JoinTokenResponse = z.infer<typeof joinTokenResponseSchema>;
 
@@ -54,10 +58,19 @@ export const reactionSchema = z.object({
   at: isoDateTimeSchema,
 });
 
+/** The host announcing a recording has started or stopped, so everyone in
+ *  the room — not just the host who pressed the button — knows they are
+ *  being recorded. */
+export const recordingStateSchema = z.object({
+  kind: z.literal('recording'),
+  active: z.boolean(),
+});
+
 export const roomDataMessageSchema = z.discriminatedUnion('kind', [
   chatMessageSchema,
   handRaiseSchema,
   reactionSchema,
+  recordingStateSchema,
 ]);
 export type RoomDataMessage = z.infer<typeof roomDataMessageSchema>;
 export type ChatMessage = z.infer<typeof chatMessageSchema>;

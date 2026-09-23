@@ -31,3 +31,11 @@ export const priceRecordingSchema = z.object({
   priceMinor: amountMinorSchema.nullable(),
 });
 export type PriceRecordingRequest = z.infer<typeof priceRecordingSchema>;
+
+/** Returned by the start/stop-recording endpoints — just enough for the live
+ *  room's own UI, before the replay's full detail is ready in the library. */
+export const recordingControlResponseSchema = z.object({
+  id: uuidSchema,
+  status: recordingStatusSchema,
+});
+export type RecordingControlResponse = z.infer<typeof recordingControlResponseSchema>;
