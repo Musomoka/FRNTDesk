@@ -1,0 +1,114 @@
+name: Deploy to Bunny.net
+
+on:
+  push:
+    branches: [main]
+
+# A new push to main makes an in-flight deploy stale — same convention as ci.yml.
+concurrency:
+  group: deploy-bunny-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22.22.3'
+  # ghcr.io requires lowercase image paths regardless of the account's display
+  # casing (the GitHub account here is "Musomoka").
+  REGISTRY_API_IMAGE: ghcr.io/musomoka/frntdesk-api
+  REGISTRY_WEB_IMAGE: ghcr.io/musomoka/frntdesk-web
+
+jobs:
+  # Runs once, ahead of both image deploys, so new code never boots against a
+  # schema it doesn't expect. Not run on container start (see apps/api/Dockerfile
+  # comments) to avoid concurrent `migrate deploy` races on a rolling update.
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate --workspace @frntdesk/api
+
+      - name: Apply migrations
+        run: npm run db:deploy --workspace @frntdesk/api
+
+  deploy-api:
+    needs: migrate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY_API_IMAGE }}:latest
+            ${{ env.REGISTRY_API_IMAGE }}:${{ github.sha }}
+
+      - name: Trigger Bunny.net deploy
+        uses: BunnyWay/actions/container-update-image@main
+        with:
+          app_id: ${{ vars.BUNNY_API_APP_ID }}
+          api_key: ${{ secrets.BUNNYNET_API_KEY }}
+          container: api
+          image_tag: ${{ github.sha }}
+
+  deploy-web:
+    needs: migrate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          build-args: |
+            AUTH0_DOMAIN=${{ vars.AUTH0_DOMAIN }}
+            AUTH0_CLIENT_ID=${{ vars.AUTH0_CLIENT_ID }}
+            AUTH0_AUDIENCE=${{ vars.AUTH0_AUDIENCE }}
+          tags: |
+            ${{ env.REGISTRY_WEB_IMAGE }}:latest
+            ${{ env.REGISTRY_WEB_IMAGE }}:${{ github.sha }}
+
+      - name: Trigger Bunny.net deploy
+        uses: BunnyWay/actions/container-update-image@main
+        with:
+          app_id: ${{ vars.BUNNY_WEB_APP_ID }}
+          api_key: ${{ secrets.BUNNYNET_API_KEY }}
+          container: web
+          image_tag: ${{ github.sha }}
