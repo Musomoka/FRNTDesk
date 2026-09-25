@@ -6,6 +6,7 @@ import { OrganisationsApi } from '../../core/organisations/organisations-api';
 import { OrganisationsPage } from './organisations.page';
 
 const ORGANISATIONS: OrganisationWithSubCourses[] = [
+  
   {
     id: 'org-1',
     name: 'Kwacha Traders Ltd',

@@ -70,7 +70,7 @@ jobs:
       - name: Trigger Bunny.net deploy
         uses: BunnyWay/actions/container-update-image@main
         with:
-          app_id: ${{ vars.BUNNY_API_APP_ID }}
+          app_id: ${{ vars.BUNNY_APP_ID }}
           api_key: ${{ secrets.BUNNYNET_API_KEY }}
           container: api
           image_tag: ${{ github.sha }}
@@ -108,7 +108,7 @@ jobs:
       - name: Trigger Bunny.net deploy
         uses: BunnyWay/actions/container-update-image@main
         with:
-          app_id: ${{ vars.BUNNY_WEB_APP_ID }}
+          app_id: ${{ vars.BUNNY_APP_ID }}
           api_key: ${{ secrets.BUNNYNET_API_KEY }}
           container: web
           image_tag: ${{ github.sha }}

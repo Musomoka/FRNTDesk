@@ -233,3 +233,8 @@ packages/shared zod schemas, money handling, MSISDN routing, payment state machi
 `packages/shared` is the single definition of every request and response shape.
 The API validates against it; the web app infers its types from it. Build it
 before anything that depends on it.
+
+
+
+DB = SUPABASE
+Video CDN = Bunny.net
