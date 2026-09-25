@@ -8,6 +8,7 @@ import {
   inject,
   input,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
@@ -513,6 +514,18 @@ export class LiveRoomPage {
       if (id && this.phase() === 'joining' && !this.room) void this.join(id);
     });
 
+    // The stage <video> elements only exist once Angular has actually
+    // rendered the 'live' template branch — one render pass after `phase`
+    // flips. Publish events (and join() itself) can call refreshStage()
+    // before that pass happens, so attachment has to be re-driven off the
+    // view-child signals themselves, not off the events that precede them.
+    effect(() => {
+      const live = this.phase() === 'live';
+      this.mainStage();
+      this.pipStage();
+      if (live) untracked(() => this.refreshStage());
+    });
+
     this.destroyRef.onDestroy(() => void this.room?.disconnect());
   }
 
@@ -573,7 +586,6 @@ export class LiveRoomPage {
       }
       this.phase.set('live');
       this.syncRoster();
-      this.refreshStage();
     } catch (err: unknown) {
       this.error.set(
         err instanceof Error ? `Could not connect to the room: ${err.message}` : 'Could not connect.',

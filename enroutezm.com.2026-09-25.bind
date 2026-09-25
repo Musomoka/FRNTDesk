@@ -1,0 +1,120 @@
+;A records
+*.enroutezm.com.	IN	0	A	159.198.74.146	
+enroutezm.com.	IN	29m59s	A	159.198.74.146	
+accounts.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+admin.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+administrator.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+alpha.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+apac.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+api.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+api1.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+api2.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+archive.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+assets.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+auth.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+backend.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+backup.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+bak.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+beta.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+blob.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+cache.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+cdn.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+control.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+cpanel.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+dashboard.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+database.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+db.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+demo.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+deprecated.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+dev.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+download.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+edge.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+edge-eu.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+edge-us.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+eu.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+files.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+gateway.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+grafana.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+health.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+healthcheck.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+home.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+id.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+identity.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+images.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+imap.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+img.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+internal.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+legacy.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+live.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+login.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+manage.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+management.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+media.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+metrics.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+mongo.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+monitor.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+mx.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+mysql.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+na.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+oauth.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+old.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+panel.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+pop.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+pop3.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+portal.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+postgres.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+preview.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+private.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+prod.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+prometheus.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+proxy.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+public.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+qa.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+rdp.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+redis.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+remote.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+s3.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+sandbox.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+signin.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+site.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+smtp.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+ssh.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+sso.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+stage.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+staging.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+static.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+stats.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+status.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+storage.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+test.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+testing.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+uat.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+uk.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+uploads.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+us.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+v1.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+v2.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+vnc.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+vpn.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+web.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+webmail.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+whm.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+www.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+www1.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+www2.enroutezm.com.	IN	29m59s	A	159.198.74.146	
+
+;TXT records
+enroutezm.com.	IN	30m	TXT	"v=spf1 include:spf.privateemail.com ~all"	
+
+;MX records
+enroutezm.com.	IN	30m	MX	10	mx1.privateemail.com.	
+enroutezm.com.	IN	30m	MX	10	mx2.privateemail.com.	
+
+;CNAME records
+autoconfig.enroutezm.com.	IN	30m	CNAME	privateemail.com.	
+autodiscover.enroutezm.com.	IN	30m	CNAME	privateemail.com.	
+mail.enroutezm.com.	IN	30m	CNAME	privateemail.com.	
+
+;SRV records
+_autodiscover._tcp.enroutezm.com.	IN	30m	SRV	0	0	443	privateemail.com.	
+
